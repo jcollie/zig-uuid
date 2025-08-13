@@ -212,6 +212,19 @@ pub const UUID = packed union {
         time_low: u32,
     },
 
+    /// Version 2 UUID
+    /// https://pubs.opengroup.org/onlinepubs/9696989899/chap5.htm#tagcjh_08_02_01_01
+    v2: packed struct(u128) {
+        node: u48,
+        local_domain: u8,
+        clock_seq_hi: u6,
+        variant: u2,
+        time_high: u12,
+        version: Version = .v2,
+        time_mid: u16,
+        local_id: u32,
+    },
+
     /// Version 3 UUID
     /// https://www.rfc-editor.org/rfc/rfc9562.html#name-uuid-version-3
     v3: packed struct(u128) {
