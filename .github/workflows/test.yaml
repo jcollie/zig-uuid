@@ -6,7 +6,7 @@ jobs:
     runs-on: ubuntu-latest
     name: Test with Zig 0.14
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v5
       - uses: mlugg/setup-zig@v2
         with:
           version: 0.14.1
@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     name: Test with Zig 0.15
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v5
       - uses: mlugg/setup-zig@v2
         with:
           version: master
