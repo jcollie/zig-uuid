@@ -23,6 +23,7 @@
   };
 
   outputs = {
+    self,
     nixpkgs,
     flake-utils,
     zig,
@@ -50,6 +51,7 @@
               pkgs.pinact
             ];
           };
+          default = self.devShells.${system}.zig_0_15;
         };
       }
     );
