@@ -47,6 +47,7 @@ pub const UUID = packed union {
         v6 = 6,
         v7 = 7,
         v8 = 8,
+        _,
     };
 
     /// Timestamps as used by v1 and v6 UUIDs
@@ -205,9 +206,9 @@ pub const UUID = packed union {
     v1: packed struct(u128) {
         node: u48,
         clock_seq: u14,
-        variant: u2,
+        variant: u2 = 0b10,
         time_high: u12,
-        version: Version,
+        version: Version = .v1,
         time_mid: u16,
         time_low: u32,
     },
@@ -218,7 +219,7 @@ pub const UUID = packed union {
         node: u48,
         local_domain: u8,
         clock_seq_hi: u6,
-        variant: u2,
+        variant: u2 = 0b10,
         time_high: u12,
         version: Version = .v2,
         time_mid: u16,
@@ -229,9 +230,9 @@ pub const UUID = packed union {
     /// https://www.rfc-editor.org/rfc/rfc9562.html#name-uuid-version-3
     v3: packed struct(u128) {
         md5_low: u62,
-        variant: u2,
+        variant: u2 = 0b10,
         md5_mid: u12,
-        version: Version,
+        version: Version = .v3,
         md5_high: u48,
     },
 
@@ -239,9 +240,9 @@ pub const UUID = packed union {
     /// https://www.rfc-editor.org/rfc/rfc9562.html#name-uuid-version-4
     v4: packed struct(u128) {
         random_c: u62,
-        variant: u2,
+        variant: u2 = 0b10,
         random_b: u12,
-        version: Version,
+        version: Version = .v4,
         random_a: u48,
     },
 
@@ -249,9 +250,9 @@ pub const UUID = packed union {
     /// https://www.rfc-editor.org/rfc/rfc9562.html#name-uuid-version-5
     v5: packed struct(u128) {
         sha1_low: u62,
-        variant: u2,
+        variant: u2 = 0b10,
         sha1_mid: u12,
-        version: Version,
+        version: Version = .v5,
         sha1_high: u48,
     },
 
@@ -260,9 +261,9 @@ pub const UUID = packed union {
     v6: packed struct(u128) {
         node: u48,
         clock_seq: u14,
-        variant: u2,
+        variant: u2 = 0b10,
         time_low: u12,
-        version: Version,
+        version: Version = .v6,
         time_mid: u16,
         time_high: u32,
     },
@@ -271,9 +272,9 @@ pub const UUID = packed union {
     /// https://www.rfc-editor.org/rfc/rfc9562.html#name-uuid-version-7
     v7: packed struct(u128) {
         rand_b: u62,
-        variant: u2,
+        variant: u2 = 0b10,
         rand_a: u12,
-        version: Version,
+        version: Version = .v7,
         unix_ts_ms: u48,
     },
 
@@ -281,9 +282,9 @@ pub const UUID = packed union {
     /// https://www.rfc-editor.org/rfc/rfc9562.html#name-uuid-version-8
     v8: packed struct(u128) {
         custom_c: u62,
-        variant: u2,
+        variant: u2 = 0b10,
         custom_b: u12,
-        version: Version,
+        version: Version = .v8,
         custom_a: u48,
     },
 
@@ -304,9 +305,7 @@ pub const UUID = packed union {
                     .v1 = .{
                         .time_low = time.v1.low,
                         .time_mid = time.v1.mid,
-                        .version = .v1,
                         .time_high = time.v1.high,
-                        .variant = 0b10,
                         .clock_seq = clock_seq,
                         .node = node,
                     },
@@ -320,9 +319,7 @@ pub const UUID = packed union {
                 return .{
                     .v3 = .{
                         .md5_high = parts.high,
-                        .version = .v3,
                         .md5_mid = parts.mid,
-                        .variant = 0b10,
                         .md5_low = parts.low,
                     },
                 };
@@ -340,9 +337,7 @@ pub const UUID = packed union {
                 return .{
                     .v5 = .{
                         .sha1_high = parts.high,
-                        .version = .v5,
                         .sha1_mid = parts.mid,
-                        .variant = 0b10,
                         .sha1_low = parts.low,
                     },
                 };
@@ -358,9 +353,7 @@ pub const UUID = packed union {
                     .v6 = .{
                         .time_low = time.v6.low,
                         .time_mid = time.v6.mid,
-                        .version = .v6,
                         .time_high = time.v6.high,
-                        .variant = 0b10,
                         .clock_seq = clock_seq,
                         .node = node,
                     },
@@ -379,9 +372,7 @@ pub const UUID = packed union {
                 return .{
                     .v8 = .{
                         .custom_a = v.part.a,
-                        .version = .v8,
                         .custom_b = v.part.b,
-                        .variant = 0b10,
                         .custom_c = v.part.c,
                     },
                 };
@@ -499,9 +490,7 @@ test "uuid test 3" {
             .v1 = .{
                 .time_low = 0xC232AB00,
                 .time_mid = 0x9414,
-                .version = .v1,
                 .time_high = 0x1EC,
-                .variant = 0b10,
                 .clock_seq = 0x33C8,
                 .node = 0x9F6BDECED846,
             },
@@ -531,7 +520,8 @@ test "uuid test 3" {
             },
         );
 
-        try std.testing.expectEqual(.v1, id.v1.version);
+        try std.testing.expectEqual(.v1, id.meta.version);
+        try std.testing.expectEqual(0b10, id.meta.variant);
 
         {
             const str = id.serialize();
@@ -549,12 +539,13 @@ test "uuid test 3" {
         const id: UUID = .{
             .v3 = .{
                 .md5_high = 0x5df418813aed,
-                .version = .v3,
                 .md5_mid = 0x515,
-                .variant = 0b10,
                 .md5_low = 0x08a72f4a814cf09e,
             },
         };
+
+        try std.testing.expectEqual(.v3, id.meta.version);
+        try std.testing.expectEqual(0b10, id.meta.variant);
 
         {
             const str = id.serialize();
@@ -576,6 +567,7 @@ test "uuid test 3" {
         });
 
         try std.testing.expectEqual(.v3, id.meta.version);
+        try std.testing.expectEqual(0b10, id.meta.variant);
 
         {
             const str = id.serialize();
@@ -592,12 +584,13 @@ test "uuid test 3" {
         const id: UUID = .{
             .v4 = .{
                 .random_a = 0x919108f752d1,
-                .version = .v4,
                 .random_b = 0x320,
-                .variant = 0b10,
                 .random_c = 0x01bacf847db4148a8,
             },
         };
+
+        try std.testing.expectEqual(.v4, id.meta.version);
+        try std.testing.expectEqual(0b10, id.meta.variant);
 
         {
             const str = id.serialize();
@@ -614,12 +607,13 @@ test "uuid test 3" {
         const id: UUID = .{
             .v5 = .{
                 .sha1_high = 0x2ed6657de927,
-                .version = .v5,
                 .sha1_mid = 0x68b,
-                .variant = 0b10,
                 .sha1_low = 0x15e12665a8aea6a2,
             },
         };
+
+        try std.testing.expectEqual(.v5, id.meta.version);
+        try std.testing.expectEqual(0b10, id.meta.variant);
 
         {
             const str = id.serialize();
@@ -641,6 +635,9 @@ test "uuid test 3" {
             },
         );
 
+        try std.testing.expectEqual(.v5, id.meta.version);
+        try std.testing.expectEqual(0b10, id.meta.variant);
+
         {
             const str = id.serialize();
             try std.testing.expectEqualStrings("2ed6657d-e927-568b-95e1-2665a8aea6a2", &str);
@@ -657,13 +654,14 @@ test "uuid test 3" {
             .v6 = .{
                 .time_high = 0x1EC9414C,
                 .time_mid = 0x232A,
-                .version = .v6,
                 .time_low = 0xB00,
-                .variant = 0b10,
                 .clock_seq = 0x33C8,
                 .node = 0x9F6BDECED846,
             },
         };
+
+        try std.testing.expectEqual(.v6, id.meta.version);
+        try std.testing.expectEqual(0b10, id.meta.variant);
 
         {
             const str = id.serialize();
@@ -680,12 +678,13 @@ test "uuid test 3" {
         const id: UUID = .{
             .v7 = .{
                 .unix_ts_ms = 0x017F22E279B0,
-                .version = .v7,
                 .rand_a = 0xCC3,
-                .variant = 0b10,
                 .rand_b = 0x18C4DC0C0C07398F,
             },
         };
+
+        try std.testing.expectEqual(.v7, id.meta.version);
+        try std.testing.expectEqual(0b10, id.meta.variant);
 
         {
             const str = id.serialize();
@@ -702,12 +701,13 @@ test "uuid test 3" {
         const id: UUID = .{
             .v8 = .{
                 .custom_a = 0x2489E9AD2EE2,
-                .version = .v8,
                 .custom_b = 0xE00,
-                .variant = 0b10,
                 .custom_c = 0x0EC932D5F69181C0,
             },
         };
+
+        try std.testing.expectEqual(.v8, id.meta.version);
+        try std.testing.expectEqual(0b10, id.meta.variant);
 
         {
             const str = id.serialize();
@@ -725,12 +725,13 @@ test "uuid test 3" {
         const id: UUID = .{
             .v8 = .{
                 .custom_a = 0x5c146b143c52,
-                .version = .v8,
                 .custom_b = 0xafd,
-                .variant = 0b10,
                 .custom_c = 0x138a375d0df1fbf6,
             },
         };
+
+        try std.testing.expectEqual(.v8, id.meta.version);
+        try std.testing.expectEqual(0b10, id.meta.variant);
 
         {
             const str = id.serialize();
