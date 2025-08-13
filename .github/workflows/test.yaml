@@ -1,13 +1,42 @@
 on:
   push: {}
+  pull_request: {}
+  workflow_dispatch: {}
 
 jobs:
+  pinact:
+    runs-on: ubuntu-latest
+    name: Check Github Actions Pins
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: cachix/install-nix-action@c134e4c9e34bac6cab09cf239815f9339aaaf84e # v31.5.1
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+      - name: pinact check
+        run: nix develop -c pinact run --check
+
+  zig-fmt:
+    runs-on: ubuntu-latest
+    name: Check Zig formatting
+    needs:
+      - pinact
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: mlugg/setup-zig@8d6198c65fb0feaa111df26e6b467fea8345e46f # v2.0.5
+        with:
+          version: master
+      - run: zig fmt --check .
+
   test_0_14:
     runs-on: ubuntu-latest
     name: Test with Zig 0.14
+    needs:
+      - pinact
+      - zig-fmt
+
     steps:
-      - uses: actions/checkout@v5
-      - uses: mlugg/setup-zig@v2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: mlugg/setup-zig@8d6198c65fb0feaa111df26e6b467fea8345e46f # v2.0.5
         with:
           version: 0.14.1
       - run: zig build test
@@ -15,9 +44,13 @@ jobs:
   test_0_15:
     runs-on: ubuntu-latest
     name: Test with Zig 0.15
+    needs:
+      - pinact
+      - zig-fmt
+
     steps:
-      - uses: actions/checkout@v5
-      - uses: mlugg/setup-zig@v2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: mlugg/setup-zig@8d6198c65fb0feaa111df26e6b467fea8345e46f # v2.0.5
         with:
           version: master
       - run: zig build test

@@ -40,12 +40,14 @@
             name = "zig-uuid-0.14";
             nativeBuildInputs = [
               pkgs.zig_0_14
+              pkgs.pinact
             ];
           };
           zig_0_15 = pkgs.mkShell {
             name = "zig-uuid-0.15";
             nativeBuildInputs = [
               zig.packages.${system}.master
+              pkgs.pinact
             ];
           };
         };
