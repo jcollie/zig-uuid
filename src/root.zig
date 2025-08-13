@@ -4,25 +4,33 @@ const std = @import("std");
 
 const assert = std.debug.assert;
 
-fn parse(comptime T: type, buf: []const u8) UUID.Errors!T {
-    const info = @typeInfo(T);
+/// Parse an unsigned hexadecimal number. Yes, there's a Zig std function for
+/// that but it allows `_` in numbers and has extra complexity for allowing
+/// signed numbers and numbers of different bases.
+fn parse(comptime Result: type, buf: []const u8) UUID.Errors!Result {
+    const info = @typeInfo(Result);
 
     assert(info == .int);
     assert(info.int.signedness == .unsigned);
     assert(info.int.bits == buf.len * 4);
 
-    // Since Zig allows `_` when it parses numbers, we need to check that only
-    // allowed hexadecimal digits have been given to us.
+    const Accumulate = std.meta.Int(.unsigned, @max(8, info.int.bits));
+    const base: Accumulate = 16;
+    var accumulate: Accumulate = 0;
+
     for (buf) |c| {
-        switch (c) {
-            '0'...'9' => continue,
-            'a'...'f' => continue,
-            'A'...'F' => continue,
+        const digit: Accumulate = switch (c) {
+            '0'...'9' => c - '0',
+            'a'...'z' => c - 'a' + 10,
+            'A'...'Z' => c - 'A' + 10,
             else => return error.MalformedUUID,
-        }
+        };
+        accumulate = std.math.mul(Accumulate, accumulate, base) catch return error.MalformedUUID;
+        accumulate = std.math.add(Accumulate, accumulate, digit) catch return error.MalformedUUID;
     }
 
-    return std.fmt.parseUnsigned(T, buf, 16) catch return error.MalformedUUID;
+    if (Result == Accumulate) return accumulate;
+    return std.math.cast(Result, accumulate) orelse return error.MalformedUUID;
 }
 
 /// A RFC9562 UUID
