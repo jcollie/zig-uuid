@@ -1,3 +1,5 @@
+//! © 2025 Jeffrey C. Ollie
+//!
 const std = @import("std");
 
 const assert = std.debug.assert;
