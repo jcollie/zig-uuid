@@ -445,7 +445,7 @@ pub const UUID = packed union {
     }
 
     pub fn serializeUrnZ(self: UUID) [45:0]u8 {
-        var buf: [45]u8 = undefined;
+        var buf: [45:0]u8 = undefined;
         @memcpy(buf[0..9], "urn:uuid:");
         _ = std.fmt.bufPrint(
             buf[9..],
