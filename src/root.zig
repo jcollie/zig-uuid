@@ -56,12 +56,14 @@ pub const UUID = packed union {
         /// reform to the Christian calendar).
         raw: u60,
 
+        /// Split the timestamp in the order needed for v1 UUIDs
         v1: packed struct(u60) {
             low: u32,
             mid: u16,
             high: u12,
         },
 
+        /// Split the timestamp in the order needed for v6 UUIDs
         v6: packed struct(u60) {
             low: u12,
             mid: u16,
