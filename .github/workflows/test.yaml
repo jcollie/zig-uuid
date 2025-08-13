@@ -1,0 +1,23 @@
+on:
+  push: {}
+
+jobs:
+  test_0_14:
+    runs-on: ubuntu-latest
+    name: Test with Zig 0.14
+    steps:
+      - uses: actions/checkout@v3
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.14.1
+      - run: zig build test
+
+  test_0_15:
+    runs-on: ubuntu-latest
+    name: Test with Zig 0.15
+    steps:
+      - uses: actions/checkout@v3
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: master
+      - run: zig build test

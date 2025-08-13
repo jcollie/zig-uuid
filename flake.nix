@@ -35,12 +35,19 @@
           inherit system;
         };
       in {
-        devShells.default = pkgs.mkShell {
-          name = "zig-uuid";
-          nativeBuildInputs = [
-            pkgs.zig_0_14
-            # zig.packages.${system}.master
-          ];
+        devShells = {
+          zig_0_14 = pkgs.mkShell {
+            name = "zig-uuid-0.14";
+            nativeBuildInputs = [
+              pkgs.zig_0_14
+            ];
+          };
+          zig_0_15 = pkgs.mkShell {
+            name = "zig-uuid-0.15";
+            nativeBuildInputs = [
+              zig.packages.${system}.master
+            ];
+          };
         };
       }
     );
