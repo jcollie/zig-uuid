@@ -131,7 +131,7 @@ pub const UUID = packed union {
         },
         v2,
         v3: struct {
-            hash: [std.crypto.hash.Md5.digest_length]u8,
+            hash: *const [std.crypto.hash.Md5.digest_length]u8,
 
             pub fn parts(self: @This()) packed struct(u128) {
                 low: u62,
@@ -140,12 +140,12 @@ pub const UUID = packed union {
                 _padding1: u4,
                 high: u48,
             } {
-                return @bitCast(std.mem.readInt(u128, &self.hash, .big));
+                return @bitCast(std.mem.readInt(u128, self.hash, .big));
             }
         },
         v4,
         v5: struct {
-            hash: [std.crypto.hash.Sha1.digest_length]u8,
+            hash: *const [std.crypto.hash.Sha1.digest_length]u8,
 
             pub fn parts(self: @This()) packed struct(u160) {
                 _padding3: u32,
@@ -155,7 +155,7 @@ pub const UUID = packed union {
                 _padding1: u4,
                 high: u48,
             } {
-                return @bitCast(std.mem.readInt(u160, &self.hash, .big));
+                return @bitCast(std.mem.readInt(u160, self.hash, .big));
             }
         },
         v6: struct {
@@ -558,7 +558,7 @@ test "uuid test 3" {
 
         const id: UUID = .new(.{
             .v3 = .{
-                .hash = .{ 0x5d, 0xf4, 0x18, 0x81, 0x3a, 0xed, 0x05, 0x15, 0x48, 0xa7, 0x2f, 0x4a, 0x81, 0x4c, 0xf0, 0x9e },
+                .hash = &[_]u8{ 0x5d, 0xf4, 0x18, 0x81, 0x3a, 0xed, 0x05, 0x15, 0x48, 0xa7, 0x2f, 0x4a, 0x81, 0x4c, 0xf0, 0x9e },
             },
         });
 
@@ -623,7 +623,7 @@ test "uuid test 3" {
         const id: UUID = .new(
             .{
                 .v5 = .{
-                    .hash = .{ 0x2e, 0xd6, 0x65, 0x7d, 0xe9, 0x27, 0x46, 0x8b, 0x55, 0xe1, 0x26, 0x65, 0xa8, 0xae, 0xa6, 0xa2, 0x2d, 0xee, 0x3e, 0x35 },
+                    .hash = &[_]u8{ 0x2e, 0xd6, 0x65, 0x7d, 0xe9, 0x27, 0x46, 0x8b, 0x55, 0xe1, 0x26, 0x65, 0xa8, 0xae, 0xa6, 0xa2, 0x2d, 0xee, 0x3e, 0x35 },
                 },
             },
         );
