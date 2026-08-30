@@ -65,9 +65,11 @@ pub const UUID = packed union {
             high: u12,
         },
 
-        /// Split the timestamp in the order needed for v2 UUIDs
+        /// Split the timestamp in the order needed for v2 UUIDs. The low 32
+        /// bits of the timestamp are not stored in a v2 UUID; the local ID
+        /// takes their place.
         v2: packed struct(u60) {
-            low: u32,
+            discarded: u32,
             mid: u16,
             high: u12,
         },
@@ -130,6 +132,18 @@ pub const UUID = packed union {
         }
     };
 
+    /// The name space that the local ID in a v2 UUID belongs to.
+    /// https://pubs.opengroup.org/onlinepubs/9696989899/chap5.htm#tagcjh_08_02_01_01
+    pub const LocalDomain = enum(u8) {
+        /// The local ID is a POSIX UID.
+        person = 0,
+        /// The local ID is a POSIX GID.
+        group = 1,
+        /// The local ID is an organization ID.
+        org = 2,
+        _,
+    };
+
     pub const NewOptions = union(Version) {
         v1: struct {
             /// The time in 100-nanosecond intervals since the UUID epoch, which
@@ -144,7 +158,25 @@ pub const UUID = packed union {
                 random: std.Random,
             },
         },
-        v2,
+        v2: struct {
+            /// The time in 100-nanosecond intervals since the UUID epoch, which
+            /// is 1582-10-15 00:00:00. Only the high 28 bits are stored, so v2
+            /// UUIDs created within the same ~7 minute window get the same
+            /// timestamp.
+            time: Time,
+            /// The name space that `local_id` belongs to.
+            local_domain: LocalDomain,
+            /// The local ID, e.g. a POSIX UID or GID.
+            local_id: u32,
+            clock_seq: union(enum) {
+                raw: u6,
+                random: std.Random,
+            },
+            node: union(enum) {
+                raw: u48,
+                random: std.Random,
+            },
+        },
         v3: struct {
             hash: *const [std.crypto.hash.Md5.digest_length]u8,
 
@@ -364,7 +396,27 @@ pub const UUID = packed union {
                 };
             },
 
-            .v2 => unreachable,
+            .v2 => |v| {
+                const time = v.time;
+                const clock_seq = switch (v.clock_seq) {
+                    .raw => |raw| raw,
+                    .random => |rng| rng.int(u6),
+                };
+                const node = switch (v.node) {
+                    .raw => |raw| raw,
+                    .random => |rng| rng.int(u48) | 0x1000_0000_0000,
+                };
+                return .{
+                    .v2 = .{
+                        .local_id = v.local_id,
+                        .time_mid = time.v2.mid,
+                        .time_high = time.v2.high,
+                        .local_domain = @intFromEnum(v.local_domain),
+                        .clock_seq_hi = clock_seq,
+                        .node = node,
+                    },
+                };
+            },
 
             .v3 => |v| {
                 const parts = v.parts();
@@ -602,6 +654,70 @@ test "uuid test 3" {
         {
             const str = id.serializeSentinel(0);
             try std.testing.expectEqualSentinel(u8, 0, "c232ab00-9414-11ec-b3c8-9f6bdeced846", &str);
+        }
+    }
+
+    {
+        // No official test vector exists for v2 UUIDs; this one was computed
+        // by hand from the DCE 1.1 field layout, using the timestamp, clock
+        // sequence, and node from the RFC 9562 v1 example with the local ID
+        // set to UID 1000. Only the high 6 bits of the example's 14-bit clock
+        // sequence (0x33c8) survive in a v2 UUID.
+        const id: UUID = .{
+            .v2 = .{
+                .local_id = 1000,
+                .time_mid = 0x9414,
+                .time_high = 0x1ec,
+                .clock_seq_hi = 0x33,
+                .local_domain = @intFromEnum(UUID.LocalDomain.person),
+                .node = 0x9f6bdeced846,
+            },
+        };
+
+        try std.testing.expectEqual(.v2, id.meta.version);
+        try std.testing.expectEqual(0b10, id.meta.variant);
+
+        {
+            const str = id.serialize();
+            try std.testing.expectEqualStrings("000003e8-9414-21ec-b300-9f6bdeced846", &str);
+        }
+        {
+            const str = id.serializeSentinel(0);
+            try std.testing.expectEqualSentinel(u8, 0, "000003e8-9414-21ec-b300-9f6bdeced846", &str);
+        }
+    }
+
+    {
+        const id: UUID = .new(
+            .{
+                .v2 = .{
+                    .time = .{
+                        .raw = 0x1ec9414c232ab00,
+                    },
+                    .local_domain = .person,
+                    .local_id = 1000,
+                    .clock_seq = .{
+                        .raw = 0x33,
+                    },
+                    .node = .{
+                        .raw = 0x9f6bdeced846,
+                    },
+                },
+            },
+        );
+
+        try std.testing.expectEqual(.v2, id.meta.version);
+        try std.testing.expectEqual(0b10, id.meta.variant);
+        try std.testing.expectEqual(1000, id.v2.local_id);
+        try std.testing.expectEqual(0, id.v2.local_domain);
+
+        {
+            const str = id.serialize();
+            try std.testing.expectEqualStrings("000003e8-9414-21ec-b300-9f6bdeced846", &str);
+        }
+        {
+            const str = id.serializeSentinel(0);
+            try std.testing.expectEqualSentinel(u8, 0, "000003e8-9414-21ec-b300-9f6bdeced846", &str);
         }
     }
 

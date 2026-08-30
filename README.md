@@ -8,7 +8,7 @@ A Zig library for generating, parsing, and formatting
 
 ## Features
 
-- Generate version 1, 3, 4, 5, 6, 7, and 8 UUIDs
+- Generate version 1, 2, 3, 4, 5, 6, 7, and 8 UUIDs
 - The special `nil` (all zeros) and `max` (all ones) UUIDs
 - Parse and format the standard string representation
   (`c232ab00-9414-11ec-b3c8-9f6bdeced846`) and the URN representation
@@ -83,8 +83,11 @@ const urn: [45]u8 = uuid.serializeUrn();
 ```
 
 Note that for version 3 and 5 UUIDs you compute the MD5 or SHA-1 hash
-yourself and pass the digest in via the `hash` field. Version 2 UUIDs
-are not supported.
+yourself and pass the digest in via the `hash` field. Version 2 (DCE
+Security) UUIDs store only 28 bits of timestamp and 6 bits of clock
+sequence, so UUIDs generated within the same ~7 minute window for the
+same local ID collide easily — prefer another version unless you
+specifically need DCE semantics.
 
 ## Development
 
