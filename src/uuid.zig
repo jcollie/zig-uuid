@@ -12,36 +12,17 @@
 
 const std = @import("std");
 
-const assert = std.debug.assert;
+/// The lower case hex digit for each nibble value.
+const hex_encode = "0123456789abcdef";
 
-/// Parse an unsigned hexadecimal number. Yes, there's a Zig std function for
-/// that but it allows `_` in numbers and has extra complexity for allowing
-/// signed numbers and numbers of different bases.
-fn parse(comptime Result: type, buf: []const u8) UUID.Errors!Result {
-    const info = @typeInfo(Result);
-
-    assert(info == .int);
-    assert(info.int.signedness == .unsigned);
-    assert(info.int.bits == buf.len * 4);
-
-    const Accumulate = std.meta.Int(.unsigned, @max(8, info.int.bits));
-    const base: Accumulate = 16;
-    var accumulate: Accumulate = 0;
-
-    for (buf) |c| {
-        const digit: Accumulate = switch (c) {
-            '0'...'9' => c - '0',
-            'a'...'z' => c - 'a' + 10,
-            'A'...'Z' => c - 'A' + 10,
-            else => return error.MalformedUUID,
-        };
-        accumulate = std.math.mul(Accumulate, accumulate, base) catch return error.MalformedUUID;
-        accumulate = std.math.add(Accumulate, accumulate, digit) catch return error.MalformedUUID;
-    }
-
-    if (Result == Accumulate) return accumulate;
-    return std.math.cast(Result, accumulate) orelse return error.MalformedUUID;
-}
+/// The nibble value for each byte, or 0xff for bytes that are not hex
+/// digits. Both cases are accepted.
+const hex_decode = blk: {
+    var table: [256]u8 = @splat(0xff);
+    for (hex_encode, 0..) |c, value| table[c] = value;
+    for ("ABCDEF", 10..) |c, value| table[c] = value;
+    break :blk table;
+};
 
 /// A RFC9562 UUID
 /// https://www.rfc-editor.org/rfc/rfc9562.html
@@ -578,16 +559,30 @@ pub const UUID = packed union {
         }
     }
 
+    /// Write the standard string representation into `buf`.
+    fn writeHex(self: UUID, buf: *[36]u8) void {
+        const bytes: [16]u8 = @bitCast(std.mem.nativeToBig(u128, self.id));
+        var i: usize = 0;
+        for (bytes, 0..) |b, j| {
+            buf[i] = hex_encode[b >> 4];
+            buf[i + 1] = hex_encode[b & 0x0f];
+            i += 2;
+            switch (j) {
+                3, 5, 7, 9 => {
+                    buf[i] = '-';
+                    i += 1;
+                },
+                else => {},
+            }
+        }
+    }
+
     /// Return the standard 36-character string representation, e.g.
     /// "c232ab00-9414-11ec-b3c8-9f6bdeced846". Hex digits are lower case.
     /// https://www.rfc-editor.org/rfc/rfc9562.html#name-uuid-format
     pub fn serialize(self: UUID) [36]u8 {
         var buf: [36]u8 = undefined;
-        _ = std.fmt.bufPrint(
-            &buf,
-            "{[a]x:0>8}-{[b]x:0>4}-{[c]x:0>4}-{[d]x:0>4}-{[e]x:0>12}",
-            self.serializable,
-        ) catch unreachable;
+        self.writeHex(&buf);
         return buf;
     }
 
@@ -595,11 +590,7 @@ pub const UUID = packed union {
     /// that expect e.g. a null-terminated string.
     pub fn serializeSentinel(self: UUID, comptime sentinel: u8) [36:sentinel]u8 {
         var buf: [36:sentinel]u8 = undefined;
-        _ = std.fmt.bufPrint(
-            &buf,
-            "{[a]x:0>8}-{[b]x:0>4}-{[c]x:0>4}-{[d]x:0>4}-{[e]x:0>12}",
-            self.serializable,
-        ) catch unreachable;
+        self.writeHex(buf[0..36]);
         buf[buf.len] = sentinel;
         return buf;
     }
@@ -612,15 +603,19 @@ pub const UUID = packed union {
     pub fn deserialize(str: []const u8) Errors!UUID {
         if (str.len != 36) return error.MalformedUUID;
         inline for (.{ 8, 13, 18, 23 }) |i| if (str[i] != '-') return error.MalformedUUID;
-        return .{
-            .serializable = .{
-                .a = try parse(u32, str[0..8]),
-                .b = try parse(u16, str[9..13]),
-                .c = try parse(u16, str[14..18]),
-                .d = try parse(u16, str[19..23]),
-                .e = try parse(u48, str[24..36]),
-            },
-        };
+        var id: u128 = 0;
+        var invalid: u8 = 0;
+        inline for (.{ 0, 9, 14, 19, 24 }, .{ 8, 4, 4, 4, 12 }) |start, len| {
+            inline for (0..len) |i| {
+                const digit = hex_decode[str[start + i]];
+                invalid |= digit;
+                id = (id << 4) | digit;
+            }
+        }
+        // 0xff marks a non-hex byte; valid digits never have the high bit
+        // set, so one check after the fact covers all 32 digits.
+        if (invalid & 0x80 != 0) return error.MalformedUUID;
+        return .{ .id = id };
     }
 
     /// Return the URN representation, e.g.
@@ -629,17 +624,7 @@ pub const UUID = packed union {
     pub fn serializeUrn(self: UUID) [45]u8 {
         var buf: [45]u8 = undefined;
         @memcpy(buf[0..9], "urn:uuid:");
-        _ = std.fmt.bufPrint(
-            buf[9..],
-            "{x:0>8}-{x:0>4}-{x:0>4}-{x:0>4}-{x:0>12}",
-            .{
-                self.serializable.a,
-                self.serializable.b,
-                self.serializable.c,
-                self.serializable.d,
-                self.serializable.e,
-            },
-        ) catch unreachable;
+        self.writeHex(buf[9..45]);
         return buf;
     }
 
@@ -648,17 +633,7 @@ pub const UUID = packed union {
     pub fn serializeUrnSentinel(self: UUID, comptime sentinel: u8) [45:sentinel]u8 {
         var buf: [45:sentinel]u8 = undefined;
         @memcpy(buf[0..9], "urn:uuid:");
-        _ = std.fmt.bufPrint(
-            buf[9..],
-            "{x:0>8}-{x:0>4}-{x:0>4}-{x:0>4}-{x:0>12}",
-            .{
-                self.serializable.a,
-                self.serializable.b,
-                self.serializable.c,
-                self.serializable.d,
-                self.serializable.e,
-            },
-        ) catch unreachable;
+        self.writeHex(buf[9..45]);
         buf[buf.len] = sentinel;
         return buf;
     }
@@ -675,10 +650,8 @@ pub const UUID = packed union {
     /// Write the standard string representation, letting a UUID be printed
     /// directly with the `{f}` format specifier.
     pub fn format(self: UUID, writer: *std.Io.Writer) std.Io.Writer.Error!void {
-        try writer.print(
-            "{[a]x:0>8}-{[b]x:0>4}-{[c]x:0>4}-{[d]x:0>4}-{[e]x:0>12}",
-            self.serializable,
-        );
+        const buf = self.serialize();
+        try writer.writeAll(&buf);
     }
 };
 
@@ -1036,6 +1009,21 @@ test "uuid test 3" {
             try std.testing.expectEqualSentinel(u8, 0, "5c146b14-3c52-8afd-938a-375d0df1fbf6", &str);
         }
     }
+}
+
+test "deserialize rejects non-hex digits" {
+    // 'g' through 'z' are not hex digits and must be rejected, even where
+    // interpreting them as digit values 16 through 35 would not overflow the
+    // field being parsed.
+    try std.testing.expectError(error.MalformedUUID, UUID.deserialize("0000000g-9414-11ec-b3c8-9f6bdeced846"));
+    try std.testing.expectError(error.MalformedUUID, UUID.deserialize("c232ab00-9414-11ec-b3c8-9f6bdecedz46"));
+    try std.testing.expectError(error.MalformedUUID, UUID.deserialize("c232ab00-9414-11eG-b3c8-9f6bdeced846"));
+    try std.testing.expectError(error.MalformedUUID, UUID.deserialize("c232ab00 9414-11ec-b3c8-9f6bdeced846"));
+}
+
+test "deserialize accepts upper case hex digits" {
+    const id = try UUID.deserialize("C232AB00-9414-11EC-B3C8-9F6BDECED846");
+    try std.testing.expectEqual(0xc232ab00941411ecb3c89f6bdeced846, id.id);
 }
 
 test "uuid test 4" {
