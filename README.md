@@ -3,10 +3,49 @@
 
 # RFC 9562 UUIDs for Zig
 
+A Zig library for generating, parsing, and formatting
+[RFC 9562](https://www.rfc-editor.org/rfc/rfc9562.html) UUIDs.
 
-## Example
+## Features
 
+- Generate version 1, 3, 4, 5, 6, 7, and 8 UUIDs
+- The special `nil` (all zeros) and `max` (all ones) UUIDs
+- Parse and format the standard string representation
+  (`c232ab00-9414-11ec-b3c8-9f6bdeced846`) and the URN representation
+  (`urn:uuid:c232ab00-9414-11ec-b3c8-9f6bdeced846`)
+- Implements `format` so UUIDs can be printed directly with `{f}`
+- `UUID` is a packed union that is exactly 128 bits — compare UUIDs
+  with `a.id == b.id`, or access the version and variant fields via
+  `meta`
+- No allocations, no dependencies
+
+## Requirements
+
+Zig 0.16.0 or later.
+
+## Installation
+
+Add the dependency to your project:
+
+```sh
+zig fetch --save git+https://git.ocjtech.us/jeff/zig-uuid
 ```
+
+Then in your `build.zig`:
+
+```zig
+const uuid = b.dependency("uuid", .{
+    .target = target,
+    .optimize = optimize,
+});
+exe.root_module.addImport("uuid", uuid.module("uuid"));
+```
+
+## Examples
+
+Generate a random (version 4) UUID:
+
+```zig
 const std = @import("std");
 const UUID = @import("uuid").UUID;
 
@@ -20,6 +59,42 @@ pub fn main(init: std.process.Init) void {
         },
     });
 
-    std.debug.print("{s}\n", .{uuid.serialize()});
+    std.debug.print("{f}\n", .{uuid});
 }
 ```
+
+Generate a timestamp-based, sortable (version 7) UUID:
+
+```zig
+const uuid: UUID = .new(.{
+    .v7 = .{
+        .unix_ts_ms = .{ .timestamp = .now(io, .real) },
+        .rng = rng,
+    },
+});
+```
+
+Parse and format:
+
+```zig
+const uuid = try UUID.deserialize("c232ab00-9414-11ec-b3c8-9f6bdeced846");
+const str: [36]u8 = uuid.serialize();
+const urn: [45]u8 = uuid.serializeUrn();
+```
+
+Note that for version 3 and 5 UUIDs you compute the MD5 or SHA-1 hash
+yourself and pass the digest in via the `hash` field. Version 2 UUIDs
+are not supported.
+
+## Development
+
+```sh
+zig build test  # run the tests
+zig build run   # run the example UUID generator
+zig build docs  # build the API docs into zig-out/docs
+```
+
+## License
+
+MIT. This project follows the [REUSE](https://reuse.software/)
+specification.
