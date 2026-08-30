@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: © 2025 Jeffrey C. Ollie
+// SPDX-License-Identifier: MIT
+
 const std = @import("std");
 const UUID = @import("uuid").UUID;
 
