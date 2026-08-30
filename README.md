@@ -10,6 +10,8 @@ A Zig library for generating, parsing, and formatting
 
 - Generate version 1, 2, 3, 4, 5, 6, 7, and 8 UUIDs
 - The special `nil` (all zeros) and `max` (all ones) UUIDs
+- The well-known name space IDs (DNS, URL, OID, X.500) for creating
+  v3 and v5 UUIDs
 - Parse and format the standard string representation
   (`c232ab00-9414-11ec-b3c8-9f6bdeced846`) and the URN representation
   (`urn:uuid:c232ab00-9414-11ec-b3c8-9f6bdeced846`)

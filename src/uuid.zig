@@ -439,6 +439,31 @@ pub const UUID = packed union {
     /// https://www.rfc-editor.org/rfc/rfc9562.html#name-max-uuid
     pub const max: UUID = .{ .id = std.math.maxInt(u128) };
 
+    /// The name space ID for fully qualified domain names, for use with v3
+    /// and v5 UUIDs.
+    /// https://www.rfc-editor.org/rfc/rfc9562.html#name-namespace-ids
+    pub const namespace_dns: UUID = .{ .id = 0x6ba7b8109dad11d180b400c04fd430c8 };
+
+    /// The name space ID for URLs, for use with v3 and v5 UUIDs.
+    /// https://www.rfc-editor.org/rfc/rfc9562.html#name-namespace-ids
+    pub const namespace_url: UUID = .{ .id = 0x6ba7b8119dad11d180b400c04fd430c8 };
+
+    /// The name space ID for ISO object identifiers, for use with v3 and v5
+    /// UUIDs.
+    /// https://www.rfc-editor.org/rfc/rfc9562.html#name-namespace-ids
+    pub const namespace_oid: UUID = .{ .id = 0x6ba7b8129dad11d180b400c04fd430c8 };
+
+    /// The name space ID for X.500 distinguished names, for use with v3 and
+    /// v5 UUIDs.
+    /// https://www.rfc-editor.org/rfc/rfc9562.html#name-namespace-ids
+    pub const namespace_x500: UUID = .{ .id = 0x6ba7b8149dad11d180b400c04fd430c8 };
+
+    /// Return the UUID as 16 bytes in network byte order, e.g. for hashing a
+    /// name space UUID when creating v3 and v5 UUIDs.
+    pub fn toBytes(self: UUID) [16]u8 {
+        return @bitCast(std.mem.nativeToBig(u128, self.id));
+    }
+
     /// Create a new UUID with the given options.
     pub fn new(options: NewOptions) UUID {
         switch (options) {
@@ -561,7 +586,7 @@ pub const UUID = packed union {
 
     /// Write the standard string representation into `buf`.
     fn writeHex(self: UUID, buf: *[36]u8) void {
-        const bytes: [16]u8 = @bitCast(std.mem.nativeToBig(u128, self.id));
+        const bytes = self.toBytes();
         var i: usize = 0;
         for (bytes, 0..) |b, j| {
             buf[i] = hex_encode[b >> 4];
@@ -1009,6 +1034,97 @@ test "uuid test 3" {
             try std.testing.expectEqualSentinel(u8, 0, "5c146b14-3c52-8afd-938a-375d0df1fbf6", &str);
         }
     }
+}
+
+test "rfc 9562 section 4 example" {
+    // The same UUID is given as a string, an unsigned integer, and a URN.
+    // https://www.rfc-editor.org/rfc/rfc9562.html#name-uuid-format
+    const id = try UUID.deserialize("f81d4fae-7dec-11d0-a765-00a0c91e6bf6");
+    try std.testing.expectEqual(329800735698586629295641978511506172918, id.id);
+    try std.testing.expectEqual(.v1, id.meta.version);
+    try std.testing.expectEqual(0b10, id.meta.variant);
+
+    const urn = id.serializeUrn();
+    try std.testing.expectEqualStrings("urn:uuid:f81d4fae-7dec-11d0-a765-00a0c91e6bf6", &urn);
+    const id2 = try UUID.deserializeUrn("urn:uuid:f81d4fae-7dec-11d0-a765-00a0c91e6bf6");
+    try std.testing.expectEqual(id.id, id2.id);
+}
+
+test "rfc 9562 uuidv4 variant examples" {
+    // All four hex forms of the 10xx variant.
+    // https://www.rfc-editor.org/rfc/rfc9562.html#name-uuid-variant-10xx-versions-
+    for ([_][]const u8{
+        "00000000-0000-4000-8000-000000000000",
+        "00000000-0000-4000-9000-000000000000",
+        "00000000-0000-4000-A000-000000000000",
+        "00000000-0000-4000-B000-000000000000",
+    }) |str| {
+        const id = try UUID.deserialize(str);
+        try std.testing.expectEqual(.v4, id.meta.version);
+        try std.testing.expectEqual(0b10, id.meta.variant);
+    }
+}
+
+test "rfc 9562 namespace IDs" {
+    // https://www.rfc-editor.org/rfc/rfc9562.html#name-namespace-ids
+    const cases = [_]struct { ns: UUID, str: []const u8 }{
+        .{ .ns = .namespace_dns, .str = "6ba7b810-9dad-11d1-80b4-00c04fd430c8" },
+        .{ .ns = .namespace_url, .str = "6ba7b811-9dad-11d1-80b4-00c04fd430c8" },
+        .{ .ns = .namespace_oid, .str = "6ba7b812-9dad-11d1-80b4-00c04fd430c8" },
+        .{ .ns = .namespace_x500, .str = "6ba7b814-9dad-11d1-80b4-00c04fd430c8" },
+    };
+    for (cases) |case| {
+        const str = case.ns.serialize();
+        try std.testing.expectEqualStrings(case.str, &str);
+        try std.testing.expectEqual(.v1, case.ns.meta.version);
+        try std.testing.expectEqual(0b10, case.ns.meta.variant);
+    }
+}
+
+test "v3 end to end from name space and name" {
+    // The RFC's v3 example is the DNS name space with the name
+    // "www.example.com"; compute the MD5 here to cover the whole path from
+    // name to UUID.
+    // https://www.rfc-editor.org/rfc/rfc9562.html#name-example-of-a-uuidv3-value
+    var digest: [std.crypto.hash.Md5.digest_length]u8 = undefined;
+    var md5 = std.crypto.hash.Md5.init(.{});
+    md5.update(&UUID.namespace_dns.toBytes());
+    md5.update("www.example.com");
+    md5.final(&digest);
+
+    const id: UUID = .new(.{ .v3 = .{ .hash = &digest } });
+    const str = id.serialize();
+    try std.testing.expectEqualStrings("5df41881-3aed-3515-88a7-2f4a814cf09e", &str);
+}
+
+test "v5 end to end from name space and name" {
+    // The RFC's v5 example is the DNS name space with the name
+    // "www.example.com"; compute the SHA-1 here to cover the whole path from
+    // name to UUID.
+    // https://www.rfc-editor.org/rfc/rfc9562.html#name-example-of-a-uuidv5-value
+    var digest: [std.crypto.hash.Sha1.digest_length]u8 = undefined;
+    var sha1 = std.crypto.hash.Sha1.init(.{});
+    sha1.update(&UUID.namespace_dns.toBytes());
+    sha1.update("www.example.com");
+    sha1.final(&digest);
+
+    const id: UUID = .new(.{ .v5 = .{ .hash = &digest } });
+    const str = id.serialize();
+    try std.testing.expectEqualStrings("2ed6657d-e927-568b-95e1-2665a8aea6a2", &str);
+}
+
+test "nil and max UUIDs" {
+    // https://www.rfc-editor.org/rfc/rfc9562.html#name-nil-uuid
+    // https://www.rfc-editor.org/rfc/rfc9562.html#name-max-uuid
+    const nil_str = UUID.nil.serialize();
+    try std.testing.expectEqualStrings("00000000-0000-0000-0000-000000000000", &nil_str);
+    const nil = try UUID.deserialize("00000000-0000-0000-0000-000000000000");
+    try std.testing.expectEqual(UUID.nil.id, nil.id);
+
+    const max_str = UUID.max.serialize();
+    try std.testing.expectEqualStrings("ffffffff-ffff-ffff-ffff-ffffffffffff", &max_str);
+    const max = try UUID.deserialize("FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF");
+    try std.testing.expectEqual(UUID.max.id, max.id);
 }
 
 test "deserialize rejects non-hex digits" {
