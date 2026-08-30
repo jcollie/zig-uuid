@@ -28,3 +28,20 @@ jobs:
 
       - name: Build API docs
         run: nix develop .#default -c zig build docs
+
+  docs:
+    needs: test
+    if: ${{ forge.ref == 'refs/heads/main' }}
+    runs-on: nixos
+    env:
+      ZIG_LOCAL_CACHE_DIR: /zig/local-cache
+      ZIG_GLOBAL_CACHE_DIR: /zig/global-cache
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Build API docs
+        run: nix develop .#default -c zig build docs
+
+      - name: Publish docs
+        run: nix develop .#default -c git-pages-cli https://jeff.ocj.page/zig-uuid/ --server ocj.page --token ${{ forge.token }} --upload-dir zig-out/docs

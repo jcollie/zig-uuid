@@ -39,9 +39,10 @@
         {
           default = pkgs.mkShell {
             nativeBuildInputs = [
-              pkgs.zig_0_16
+              pkgs.git-pages-cli
               pkgs.pinact
               pkgs.reuse
+              pkgs.zig_0_16
             ];
           };
         }
