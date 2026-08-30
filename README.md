@@ -89,6 +89,21 @@ sequence, so UUIDs generated within the same ~7 minute window for the
 same local ID collide easily — prefer another version unless you
 specifically need DCE semantics.
 
+## Standards
+
+- [RFC 9562: Universally Unique IDentifiers (UUIDs)](https://www.rfc-editor.org/rfc/rfc9562.html)
+  — the current UUID specification, which this library implements. It
+  defines versions 1 and 3 through 8, the `nil` and `max` UUIDs, and
+  the string and URN representations, and it obsoletes
+  [RFC 4122](https://www.rfc-editor.org/rfc/rfc4122.html).
+- [DCE 1.1: Authentication and Security Services](https://pubs.opengroup.org/onlinepubs/9696989899/chap5.htm#tagcjh_08_02_01_01)
+  — the Open Group specification that defines version 2 "DCE Security"
+  UUIDs. RFC 9562 reserves version 2 but leaves its definition here.
+
+The test suite checks against the example values and test vectors from
+RFC 9562, with the name-based v8 example corrected per
+[erratum 7929](https://www.rfc-editor.org/errata/eid7929).
+
 ## Development
 
 ```sh
