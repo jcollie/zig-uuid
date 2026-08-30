@@ -107,9 +107,10 @@ RFC 9562, with the name-based v8 example corrected per
 ## Development
 
 ```sh
-zig build test  # run the tests
-zig build run   # run the example UUID generator
-zig build docs  # build the API docs into zig-out/docs
+zig build test   # run the tests
+zig build run    # run the example UUID generator
+zig build docs   # build the API docs into zig-out/docs
+zig build bench  # run the benchmarks (always ReleaseFast)
 ```
 
 ## License

@@ -57,6 +57,37 @@ pub fn build(b: *std.Build) void {
     }
 
     {
+        // The benchmarks always build ReleaseFast, independent of -Doptimize,
+        // so they need their own instance of the uuid module built the same
+        // way.
+        const bench_uuid = b.createModule(.{
+            .root_source_file = b.path("src/uuid.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+        });
+
+        const bench_exe = b.addExecutable(.{
+            .name = "bench",
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("src/bench.zig"),
+                .target = target,
+                .optimize = .ReleaseFast,
+                .imports = &.{
+                    .{
+                        .name = "uuid",
+                        .module = bench_uuid,
+                    },
+                },
+            }),
+        });
+
+        const run_bench = b.addRunArtifact(bench_exe);
+
+        const bench_step = b.step("bench", "Run the benchmarks");
+        bench_step.dependOn(&run_bench.step);
+    }
+
+    {
         const lib = b.addLibrary(.{
             .name = "uuid",
             .root_module = mod,
