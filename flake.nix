@@ -6,7 +6,13 @@
 
   inputs = {
     nixpkgs = {
-      url = "nixpkgs/nixos-unstable";
+      url = "https://channels.nixos.org/nixpkgs-unstable/nixexprs.tar.xz";
+    };
+    zon2nix = {
+      url = "github:jcollie/zon2nix";
+      inputs = {
+        nixpkgs.follows = "nixpkgs";
+      };
     };
   };
 
@@ -16,29 +22,29 @@
       ...
     }:
     let
-      lib = nixpkgs.lib;
-      platforms = [
-        "aarch64-darwin"
-        "aarch64-linux"
-        "x86_64-linux"
-      ];
+      inherit (nixpkgs) lib;
       makePackages =
         system:
         import nixpkgs {
           inherit system;
-          overlays = [ ];
         };
-      forAllSystems = (function: lib.genAttrs platforms (system: function (makePackages system)));
+      forAllSystems = lib.genAttrs lib.systems.flakeExposed;
     in
     {
-      devShells = forAllSystems (pkgs: {
-        default = pkgs.mkShell {
-          nativeBuildInputs = [
-            pkgs.zig_0_16
-            pkgs.pinact
-            pkgs.reuse
-          ];
-        };
-      });
+      devShells = forAllSystems (
+        system:
+        let
+          pkgs = makePackages system;
+        in
+        {
+          default = pkgs.mkShell {
+            nativeBuildInputs = [
+              pkgs.zig_0_16
+              pkgs.pinact
+              pkgs.reuse
+            ];
+          };
+        }
+      );
     };
 }
