@@ -1,6 +1,15 @@
 // SPDX-FileCopyrightText: © 2025 Jeffrey C. Ollie
 // SPDX-License-Identifier: MIT
 
+//! Generate, parse, and format RFC 9562 UUIDs.
+//!
+//! Everything lives on the `UUID` type: `UUID.new` creates a UUID of any
+//! version from caller-supplied inputs, `UUID.deserialize` and
+//! `UUID.deserializeUrn` parse the two standard string forms, and
+//! `UUID.serialize` and friends produce them again.
+//!
+//! https://www.rfc-editor.org/rfc/rfc9562.html
+
 const std = @import("std");
 
 const assert = std.debug.assert;
@@ -37,8 +46,12 @@ fn parse(comptime Result: type, buf: []const u8) UUID.Errors!Result {
 /// A RFC9562 UUID
 /// https://www.rfc-editor.org/rfc/rfc9562.html
 pub const UUID = packed union {
+    /// The errors that can occur when deserializing a UUID.
     pub const Errors = error{MalformedUUID};
 
+    /// The UUID version, stored in the four bits above the low 48 bits of
+    /// every UUID. RFC 9562 defines versions 1 through 8; the enum is
+    /// non-exhaustive because deserialized UUIDs can carry any value.
     pub const Version = enum(u4) {
         v1 = 1,
         v2 = 2,
@@ -144,20 +157,36 @@ pub const UUID = packed union {
         _,
     };
 
+    /// Per-version options for `new`. Each variant carries exactly the
+    /// inputs its UUID version needs; nothing is read from the environment
+    /// implicitly, so timestamps, randomness, and node IDs are always
+    /// supplied by the caller.
     pub const NewOptions = union(Version) {
+        /// A Gregorian-time-based UUID.
         v1: struct {
             /// The time in 100-nanosecond intervals since the UUID epoch, which
             /// is 1582-10-15 00:00:00.
             time: Time,
+            /// The clock sequence guards against duplicate UUIDs when the
+            /// clock moves backwards; provide a stable value or a source of
+            /// randomness to draw one from.
             clock_seq: union(enum) {
                 raw: u14,
                 random: std.Random,
             },
+            /// The node ID, historically a MAC address. A randomly generated
+            /// node gets its multicast bit set, as RFC 9562 recommends, so it
+            /// cannot collide with a real MAC address.
             node: union(enum) {
                 raw: u48,
                 random: std.Random,
             },
         },
+        /// A DCE Security UUID: a v1 UUID with the low timestamp bits
+        /// replaced by a local ID and the low clock sequence byte replaced by
+        /// the domain that ID belongs to. Because so much timestamp and clock
+        /// sequence precision is sacrificed, v2 UUIDs collide easily; prefer
+        /// another version unless DCE semantics are required.
         v2: struct {
             /// The time in 100-nanosecond intervals since the UUID epoch, which
             /// is 1582-10-15 00:00:00. Only the high 28 bits are stored, so v2
@@ -168,15 +197,23 @@ pub const UUID = packed union {
             local_domain: LocalDomain,
             /// The local ID, e.g. a POSIX UID or GID.
             local_id: u32,
+            /// Only 6 bits of clock sequence remain in a v2 UUID; provide a
+            /// stable value or a source of randomness to draw one from.
             clock_seq: union(enum) {
                 raw: u6,
                 random: std.Random,
             },
+            /// The node ID, historically a MAC address. A randomly generated
+            /// node gets its multicast bit set, as RFC 9562 recommends, so it
+            /// cannot collide with a real MAC address.
             node: union(enum) {
                 raw: u48,
                 random: std.Random,
             },
         },
+        /// A name-based UUID using MD5. The caller computes the MD5 digest of
+        /// the name space UUID (in binary, big-endian) concatenated with the
+        /// name; this library only packs the digest bits into UUID form.
         v3: struct {
             hash: *const [std.crypto.hash.Md5.digest_length]u8,
 
@@ -190,9 +227,15 @@ pub const UUID = packed union {
                 return @bitCast(std.mem.readInt(u128, self.hash, .big));
             }
         },
+        /// A random UUID: 122 random bits. Use a cryptographically secure
+        /// source of randomness if the UUID must be unguessable.
         v4: struct {
             rng: std.Random,
         },
+        /// A name-based UUID using SHA-1. The caller computes the SHA-1
+        /// digest of the name space UUID (in binary, big-endian) concatenated
+        /// with the name; this library only packs the high digest bits into
+        /// UUID form. Prefer v5 over v3 when creating new name-based UUIDs.
         v5: struct {
             hash: *const [std.crypto.hash.Sha1.digest_length]u8,
 
@@ -207,26 +250,45 @@ pub const UUID = packed union {
                 return @bitCast(std.mem.readInt(u160, self.hash, .big));
             }
         },
+        /// A reordered Gregorian-time-based UUID: the same fields as v1, but
+        /// with the timestamp stored most significant bits first, so that
+        /// lexical order matches creation order. Prefer v6 over v1 when
+        /// sortability matters.
         v6: struct {
             /// The time in 100-nanosecond intervals since the UUID epoch, which
             /// is 1582-10-15 00:00:00.
             time: Time,
+            /// The clock sequence guards against duplicate UUIDs when the
+            /// clock moves backwards; provide a stable value or a source of
+            /// randomness to draw one from.
             clock_seq: union(enum) {
                 raw: u14,
                 random: std.Random,
             },
+            /// The node ID, historically a MAC address. A randomly generated
+            /// node gets its multicast bit set, as RFC 9562 recommends, so it
+            /// cannot collide with a real MAC address.
             node: union(enum) {
                 raw: u48,
                 random: std.Random,
             },
         },
+        /// A Unix-time-based UUID: a 48-bit millisecond timestamp followed by
+        /// 74 random bits. Sortable like v6 but based on the Unix epoch;
+        /// RFC 9562 recommends v7 over v1 and v6 where possible.
         v7: struct {
+            /// The number of milliseconds since the Unix epoch, either as a
+            /// raw value or taken from a `std.Io.Timestamp`.
             unix_ts_ms: union(enum) {
                 raw: u48,
                 timestamp: std.Io.Timestamp,
             },
+            /// The source of the 74 random bits.
             rng: std.Random,
         },
+        /// An experimental or vendor-specific UUID: 122 bits with meaning
+        /// entirely up to the caller, either as one value or split into the
+        /// three custom fields of the wire format.
         v8: packed union {
             custom: u122,
             parts: packed struct(u122) {
@@ -492,6 +554,8 @@ pub const UUID = packed union {
         }
     }
 
+    /// Return the standard 36-character string representation, e.g.
+    /// "c232ab00-9414-11ec-b3c8-9f6bdeced846". Hex digits are lower case.
     pub fn serialize(self: UUID) [36]u8 {
         var buf: [36]u8 = undefined;
         _ = std.fmt.bufPrint(
@@ -502,6 +566,8 @@ pub const UUID = packed union {
         return buf;
     }
 
+    /// Like `serialize`, but the returned array carries a sentinel, for APIs
+    /// that expect e.g. a null-terminated string.
     pub fn serializeSentinel(self: UUID, comptime sentinel: u8) [36:sentinel]u8 {
         var buf: [36:sentinel]u8 = undefined;
         _ = std.fmt.bufPrint(
@@ -513,6 +579,10 @@ pub const UUID = packed union {
         return buf;
     }
 
+    /// Parse the standard 36-character string representation. Both upper and
+    /// lower case hex digits are accepted. No version or variant checking is
+    /// done; inspect `meta` afterwards if the UUID must be of a particular
+    /// kind.
     pub fn deserialize(str: []const u8) Errors!UUID {
         if (str.len != 36) return error.MalformedUUID;
         inline for (.{ 8, 13, 18, 23 }) |i| if (str[i] != '-') return error.MalformedUUID;
@@ -527,6 +597,9 @@ pub const UUID = packed union {
         };
     }
 
+    /// Return the URN representation, e.g.
+    /// "urn:uuid:c232ab00-9414-11ec-b3c8-9f6bdeced846".
+    /// https://www.rfc-editor.org/rfc/rfc9562.html#name-uuids-as-urns
     pub fn serializeUrn(self: UUID) [45]u8 {
         var buf: [45]u8 = undefined;
         @memcpy(buf[0..9], "urn:uuid:");
@@ -544,6 +617,8 @@ pub const UUID = packed union {
         return buf;
     }
 
+    /// Like `serializeUrn`, but the returned array carries a sentinel, for
+    /// APIs that expect e.g. a null-terminated string.
     pub fn serializeUrnSentinel(self: UUID, comptime sentinel: u8) [45:sentinel]u8 {
         var buf: [45:sentinel]u8 = undefined;
         @memcpy(buf[0..9], "urn:uuid:");
@@ -562,12 +637,16 @@ pub const UUID = packed union {
         return buf;
     }
 
+    /// Parse the URN representation. The "urn:uuid:" prefix must be lower
+    /// case; the hex digits may be either case.
     pub fn deserializeUrn(urn: []const u8) Errors!UUID {
         if (urn.len != 45) return error.MalformedUUID;
         if (!std.mem.eql(u8, "urn:uuid:", urn[0..9])) return error.MalformedUUID;
         return try deserialize(urn[9..]);
     }
 
+    /// Write the standard string representation, letting a UUID be printed
+    /// directly with the `{f}` format specifier.
     pub fn format(self: UUID, writer: *std.Io.Writer) std.Io.Writer.Error!void {
         try writer.print(
             "{[a]x:0>8}-{[b]x:0>4}-{[c]x:0>4}-{[d]x:0>4}-{[e]x:0>12}",
