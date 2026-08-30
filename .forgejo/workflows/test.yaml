@@ -26,9 +26,6 @@ jobs:
       - name: Run tests
         run: nix develop .#default -c zig build test
 
-      - name: Build API docs
-        run: nix develop .#default -c zig build docs
-
   docs:
     needs: test
     if: ${{ forge.ref == 'refs/heads/main' }}
